@@ -51,10 +51,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	// for debug
-	fmt.Println(containers)
-	fmt.Println(len(containers))
+	fmt.Print(containers)
 
 	// test value
 	container := "hackmd-dev"
@@ -62,21 +59,13 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	// for debug
-	fmt.Println(objects)
-	fmt.Println(len(objects))
-
-	// test value
-	objectName := "upload_134bf91dac07807a114452d69f6c8a7d.png"
-	object, err := getObject(&token, &container, &objectName)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = upload2GCP(ctx, bkt, &objectName, object)
-	if err != nil {
-		log.Fatal(err)
+	for i, objectName := range objects {
+		wc := bkt.Object(objectName).NewWriter(ctx)
+		err = backupObject(&token, &container, &objectName, wc)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Print(i)
 	}
 }
 
@@ -162,7 +151,7 @@ func retrieveObjectList(token *string, container *string) ([]string, error) {
 	return objects, nil
 }
 
-func getObject(token *string, container *string, objectName *string) (*io.Reader, error) {
+func backupObject(token *string, container *string, objectName *string, wc *storage.Writer) error {
 	url := "https://object-storage.tyo1.conoha.io/v1/nc_" + os.Getenv("Conoha_TENANT_ID") + "/" + *container + "/" + *objectName
 
 	client := &http.Client{}
@@ -172,22 +161,16 @@ func getObject(token *string, container *string, objectName *string) (*io.Reader
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	defer resp.Body.Close()
-	object := io.Reader(resp.Body)
-
-	return &object, nil
-}
-
-func upload2GCP(ctx context.Context, bkt *storage.BucketHandle, objectName *string, object *io.Reader) error {
-	wc := bkt.Object(*objectName).NewWriter(ctx)
-	if _, err := io.Copy(wc, *object); err != nil {
+	if _, err := io.Copy(wc, resp.Body); err != nil {
 		return err
 	}
 	if err := wc.Close(); err != nil {
 		return err
 	}
+
 	return nil
 }
+
