@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 
 	"cloud.google.com/go/storage"
 	"golang.org/x/net/context"
@@ -59,14 +60,20 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	var wg sync.WaitGroup
 	for i, objectName := range objects {
-		wc := bkt.Object(objectName).NewWriter(ctx)
-		err = backupObject(&token, &container, &objectName, wc)
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Print(i)
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			wc := bkt.Object(objectName).NewWriter(ctx)
+			err = backupObject(&token, &container, &objectName, wc)
+			if err != nil {
+				log.Fatal(err)
+			}
+			fmt.Print(i)
+		}(i)
 	}
+	wg.Wait()
 }
 
 func getConohaAPIToken() (string, error) {
