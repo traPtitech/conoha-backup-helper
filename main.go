@@ -54,26 +54,28 @@ func main() {
 	}
 	fmt.Print(containers)
 
-	// test value
-	container := "hackmd-dev"
-	objects, err := retrieveObjectList(&token, &container)
-	if err != nil {
-		log.Fatal(err)
-	}
-	var wg sync.WaitGroup
-	for i, objectName := range objects {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			wc := bkt.Object(objectName).NewWriter(ctx)
-			err = backupObject(&token, &container, &objectName, wc)
+	// TODO: コンテナごとにバケットを分割
+	for _, container := range containers {
+		fmt.Print("Transferring objects of " + container + ": ")
+
+		objects, err := retrieveObjectList(&token, &container)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		// TODO: スレッドの上限設定
+		var wg sync.WaitGroup
+		for _, objectName := range objects {
+			wg.Add(1)
+			backupObject(ctx, bkt, &token, &container, &objectName, &wg)
 			if err != nil {
 				log.Fatal(err)
 			}
-			fmt.Print(i)
-		}(i)
+		}
+		wg.Wait()
+
+		fmt.Println("Done!")
 	}
-	wg.Wait()
 }
 
 func getConohaAPIToken() (string, error) {
@@ -85,7 +87,7 @@ func getConohaAPIToken() (string, error) {
 
 	client := &http.Client{}
 
-	reqJSON, _ := json.Marshal(&authInfo)
+	reqJSON, _ := json.Marshal(authInfo)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(reqJSON))
 	if err != nil {
 		return "", err
@@ -100,7 +102,7 @@ func getConohaAPIToken() (string, error) {
 		return "", err
 	}
 
-	err = json.Unmarshal(body, &respJSON)
+	err = json.Unmarshal(body, respJSON)
 	if err != nil {
 		return "", err
 	}
@@ -122,12 +124,10 @@ func retrieveContainerList(token *string) ([]string, error) {
 	}
 
 	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(resp.Body)
 
-	containers := strings.Split(string(body), "\n")
+	containers := strings.Split(buf.String(), "\n")
 	containers = containers[:len(containers)-1]
 
 	return containers, nil
@@ -147,18 +147,16 @@ func retrieveObjectList(token *string, container *string) ([]string, error) {
 	}
 
 	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(resp.Body)
 
-	objects := strings.Split(string(body), "\n")
+	objects := strings.Split(buf.String(), "\n")
 	objects = objects[:len(objects)-1]
 
 	return objects, nil
 }
 
-func backupObject(token *string, container *string, objectName *string, wc *storage.Writer) error {
+func transferObject(token *string, container *string, objectName *string, wc *storage.Writer) error {
 	url := "https://object-storage.tyo1.conoha.io/v1/nc_" + os.Getenv("Conoha_TENANT_ID") + "/" + *container + "/" + *objectName
 
 	client := &http.Client{}
@@ -181,3 +179,9 @@ func backupObject(token *string, container *string, objectName *string, wc *stor
 	return nil
 }
 
+func backupObject(ctx context.Context, bkt *storage.BucketHandle, token *string, container *string, objectName *string, wg *sync.WaitGroup) error {
+	defer wg.Done()
+	wc := bkt.Object(*objectName).NewWriter(ctx)
+	err := transferObject(token, container, objectName, wc)
+	return err
+}
