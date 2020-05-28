@@ -12,6 +12,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"cloud.google.com/go/storage"
 	"golang.org/x/net/context"
@@ -35,59 +36,66 @@ type AccessToken struct {
 	} `json:"access"`
 }
 
+var tenantID string
+
 func main() {
-	token, err := getConohaAPIToken()
+	path := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	tenantID = os.Getenv("Conoha_TENANT_ID")
+
+	authInfo := new(AuthInfo)
+	authInfo.Auth.PasswordCredentials.UserName = os.Getenv("Conoha_USERNAME")
+	authInfo.Auth.PasswordCredentials.Password = os.Getenv("Conoha_PASSWORD")
+	authInfo.Auth.TenantID = tenantID
+
+	token, err := getConohaAPIToken(authInfo)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	ctx := context.Background()
-	client, err := storage.NewClient(ctx, option.WithCredentialsFile(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")))
+	client, err := storage.NewClient(ctx, option.WithCredentialsFile(path))
 	if err != nil {
 		log.Fatal(err)
 	}
-	bkt := client.Bucket(os.Getenv("BUCKET_NAME"))
 
 	containers, err := retrieveContainerList(&token)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Print(containers)
+	fmt.Println(containers)
 
-	// TODO: コンテナごとにバケットを分割
+	limit := make(chan bool, 30) // 最大でgoroutineは30個
 	for _, container := range containers {
-		fmt.Print("Transferring objects of " + container + ": ")
+		fmt.Println("\n" + "\u001b[00;32m" + "Creating bucket for " + container + " \u001b[00m")
+		bkt, err := createBucket(ctx, client, &container)
+		if err != nil {
+			log.Fatal(err)
+		}
 
+		fmt.Println("\n" + "\u001b[00;32m" + "Transferring objects in " + container + " \u001b[00m")
 		objects, err := retrieveObjectList(&token, &container)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		// TODO: スレッドの上限設定
 		var wg sync.WaitGroup
 		for _, objectName := range objects {
 			wg.Add(1)
-			backupObject(ctx, bkt, &token, &container, &objectName, &wg)
+			go backupObject(ctx, bkt, &token, &container, objectName, &wg, &limit)
 			if err != nil {
 				log.Fatal(err)
 			}
 		}
 		wg.Wait()
-
-		fmt.Println("Done!")
 	}
 }
 
-func getConohaAPIToken() (string, error) {
+func getConohaAPIToken(authInfo *AuthInfo) (string, error) {
 	url := "https://identity.tyo1.conoha.io/v2.0/tokens"
-	authInfo := new(AuthInfo)
-	authInfo.Auth.PasswordCredentials.UserName = os.Getenv("Conoha_USERNAME")
-	authInfo.Auth.PasswordCredentials.Password = os.Getenv("Conoha_PASSWORD")
-	authInfo.Auth.TenantID = os.Getenv("Conoha_TENANT_ID")
 
 	client := &http.Client{}
 
-	reqJSON, _ := json.Marshal(authInfo)
+	reqJSON, _ := json.Marshal(*authInfo)
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(reqJSON))
 	if err != nil {
 		return "", err
@@ -111,7 +119,7 @@ func getConohaAPIToken() (string, error) {
 }
 
 func retrieveContainerList(token *string) ([]string, error) {
-	url := "https://object-storage.tyo1.conoha.io/v1/nc_" + os.Getenv("Conoha_TENANT_ID")
+	url := "https://object-storage.tyo1.conoha.io/v1/nc_" + tenantID
 
 	client := &http.Client{}
 
@@ -133,8 +141,23 @@ func retrieveContainerList(token *string) ([]string, error) {
 	return containers, nil
 }
 
+func createBucket(ctx context.Context, client *storage.Client, container *string) (*storage.BucketHandle, error) {
+	t := time.Now()
+	bucketName := fmt.Sprintf("%s-%d-%d-%d", *container, t.Year(), t.Month(), t.Day())
+	defer fmt.Println("\u001b[00;32m" + "Created: " + bucketName + " \u001b[00m")
+
+	bkt := client.Bucket(bucketName)
+	if err := bkt.Create(ctx, os.Getenv("PROJECT_ID"), &storage.BucketAttrs{
+		StorageClass: "STANDARD",
+		Location:     "asia",
+	}); err != nil {
+		return nil, err
+	}
+	return bkt, nil
+}
+
 func retrieveObjectList(token *string, container *string) ([]string, error) {
-	url := "https://object-storage.tyo1.conoha.io/v1/nc_" + os.Getenv("Conoha_TENANT_ID") + "/" + *container
+	url := "https://object-storage.tyo1.conoha.io/v1/nc_" + tenantID + "/" + *container
 
 	client := &http.Client{}
 
@@ -157,7 +180,7 @@ func retrieveObjectList(token *string, container *string) ([]string, error) {
 }
 
 func transferObject(token *string, container *string, objectName *string, wc *storage.Writer) error {
-	url := "https://object-storage.tyo1.conoha.io/v1/nc_" + os.Getenv("Conoha_TENANT_ID") + "/" + *container + "/" + *objectName
+	url := "https://object-storage.tyo1.conoha.io/v1/nc_" + tenantID + "/" + *container + "/" + *objectName
 
 	client := &http.Client{}
 
@@ -169,6 +192,8 @@ func transferObject(token *string, container *string, objectName *string, wc *st
 		return err
 	}
 
+	// TODO: checksum挟む
+	defer resp.Body.Close()
 	if _, err := io.Copy(wc, resp.Body); err != nil {
 		return err
 	}
@@ -179,9 +204,12 @@ func transferObject(token *string, container *string, objectName *string, wc *st
 	return nil
 }
 
-func backupObject(ctx context.Context, bkt *storage.BucketHandle, token *string, container *string, objectName *string, wg *sync.WaitGroup) error {
+func backupObject(ctx context.Context, bkt *storage.BucketHandle, token *string, container *string, objectName string, wg *sync.WaitGroup, limit *chan bool) error {
+	*limit <- true
+	defer func() { <-*limit }()
+	defer fmt.Println(objectName)
 	defer wg.Done()
-	wc := bkt.Object(*objectName).NewWriter(ctx)
-	err := transferObject(token, container, objectName, wc)
+	wc := bkt.Object(objectName).NewWriter(ctx)
+	err := transferObject(token, container, &objectName, wc)
 	return err
 }
