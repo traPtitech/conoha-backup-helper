@@ -64,7 +64,8 @@ func main() {
 	}
 	fmt.Println(containers)
 
-	limit := make(chan bool, 30) // 最大でgoroutineは30個
+	// 最大でgoroutineは30個
+	limit := make(chan bool, 30)
 	for _, container := range containers {
 		fmt.Println("\n" + "\u001b[00;32m" + "Creating bucket for " + container + " \u001b[00m")
 		bkt, err := createBucket(ctx, client, &container)

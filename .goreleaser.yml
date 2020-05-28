@@ -1,0 +1,17 @@
+project_name: conoha-backup-helper
+before:
+  hooks:
+    - go mod download
+builds:
+  - main: .
+    binary: conoha-backup-helper
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Version}}
+      - -X main.Revision={{.ShortCommit}}
+    env:
+      - CGO_ENABLED=0
+    goarch:
+      - amd64
+archives:
+  - wrap_in_directory: true
