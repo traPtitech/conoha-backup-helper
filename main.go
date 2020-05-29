@@ -42,7 +42,7 @@ func main() {
 	path := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
 	tenantID = os.Getenv("Conoha_TENANT_ID")
 
-	authInfo := new(AuthInfo)
+	authInfo := &AuthInfo{}
 	authInfo.Auth.PasswordCredentials.UserName = os.Getenv("Conoha_USERNAME")
 	authInfo.Auth.PasswordCredentials.Password = os.Getenv("Conoha_PASSWORD")
 	authInfo.Auth.TenantID = tenantID
@@ -58,7 +58,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	containers, err := retrieveContainerList(&token)
+	containers, err := retrieveContainerList(token)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -68,13 +68,13 @@ func main() {
 	limit := make(chan bool, 30)
 	for _, container := range containers {
 		fmt.Println("\n" + "\u001b[00;32m" + "Creating bucket for " + container + " \u001b[00m")
-		bkt, err := createBucket(ctx, client, &container)
+		bkt, err := createBucket(ctx, client, container)
 		if err != nil {
 			log.Fatal(err)
 		}
 
 		fmt.Println("\n" + "\u001b[00;32m" + "Transferring objects in " + container + " \u001b[00m")
-		objects, err := retrieveObjectList(&token, &container)
+		objects, err := retrieveObjectList(token, container)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -82,7 +82,7 @@ func main() {
 		var wg sync.WaitGroup
 		for _, objectName := range objects {
 			wg.Add(1)
-			go backupObject(ctx, bkt, &token, &container, objectName, &wg, &limit)
+			go backupObject(ctx, bkt, token, container, objectName, &wg, limit)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -104,28 +104,22 @@ func getConohaAPIToken(authInfo *AuthInfo) (string, error) {
 
 	resp, err := client.Do(req)
 
-	respJSON := new(AccessToken)
+	respJSON := &AccessToken{}
 	defer resp.Body.Close()
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	err = json.Unmarshal(body, respJSON)
-	if err != nil {
-		return "", err
+	if err := json.NewDecoder(resp.Body).Decode(&respJSON); err != nil {
+		return "", nil
 	}
 
 	return respJSON.Access.Token.ID, nil
 }
 
-func retrieveContainerList(token *string) ([]string, error) {
+func retrieveContainerList(token string) ([]string, error) {
 	url := "https://object-storage.tyo1.conoha.io/v1/nc_" + tenantID
 
 	client := &http.Client{}
 
 	req, _ := http.NewRequest("GET", url, nil)
-	req.Header.Set("X-Auth-Token", *token)
+	req.Header.Set("X-Auth-Token", token)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -133,23 +127,25 @@ func retrieveContainerList(token *string) ([]string, error) {
 	}
 
 	defer resp.Body.Close()
-	buf := new(bytes.Buffer)
-	buf.ReadFrom(resp.Body)
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
 
-	containers := strings.Split(buf.String(), "\n")
+	containers := strings.Split(string(body), "\n")
 	containers = containers[:len(containers)-1]
 
 	return containers, nil
 }
 
-func createBucket(ctx context.Context, client *storage.Client, container *string) (*storage.BucketHandle, error) {
+func createBucket(ctx context.Context, client *storage.Client, container string) (*storage.BucketHandle, error) {
 	t := time.Now()
-	bucketName := fmt.Sprintf("%s-%d-%d-%d", *container, t.Year(), t.Month(), t.Day())
+	bucketName := fmt.Sprintf("%s-%d-%d-%d", container, t.Year(), t.Month(), t.Day())
 	defer fmt.Println("\u001b[00;32m" + "Created: " + bucketName + " \u001b[00m")
 
 	bkt := client.Bucket(bucketName)
 	if err := bkt.Create(ctx, os.Getenv("PROJECT_ID"), &storage.BucketAttrs{
-		StorageClass: "STANDARD",
+		StorageClass: "STANDARD", // TODO: 実際に動かすときは"COLDLINE"
 		Location:     "asia",
 	}); err != nil {
 		return nil, err
@@ -157,13 +153,13 @@ func createBucket(ctx context.Context, client *storage.Client, container *string
 	return bkt, nil
 }
 
-func retrieveObjectList(token *string, container *string) ([]string, error) {
-	url := "https://object-storage.tyo1.conoha.io/v1/nc_" + tenantID + "/" + *container
+func retrieveObjectList(token string, container string) ([]string, error) {
+	url := "https://object-storage.tyo1.conoha.io/v1/nc_" + tenantID + "/" + container
 
 	client := &http.Client{}
 
 	req, _ := http.NewRequest("GET", url, nil)
-	req.Header.Set("X-Auth-Token", *token)
+	req.Header.Set("X-Auth-Token", token)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -180,13 +176,13 @@ func retrieveObjectList(token *string, container *string) ([]string, error) {
 	return objects, nil
 }
 
-func transferObject(token *string, container *string, objectName *string, wc *storage.Writer) error {
-	url := "https://object-storage.tyo1.conoha.io/v1/nc_" + tenantID + "/" + *container + "/" + *objectName
+func transferObject(token string, container string, objectName string, wc *storage.Writer) error {
+	url := "https://object-storage.tyo1.conoha.io/v1/nc_" + tenantID + "/" + container + "/" + objectName
 
 	client := &http.Client{}
 
 	req, _ := http.NewRequest("GET", url, nil)
-	req.Header.Set("X-Auth-Token", *token)
+	req.Header.Set("X-Auth-Token", token)
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -205,12 +201,12 @@ func transferObject(token *string, container *string, objectName *string, wc *st
 	return nil
 }
 
-func backupObject(ctx context.Context, bkt *storage.BucketHandle, token *string, container *string, objectName string, wg *sync.WaitGroup, limit *chan bool) error {
-	*limit <- true
-	defer func() { <-*limit }()
+func backupObject(ctx context.Context, bkt *storage.BucketHandle, token string, container string, objectName string, wg *sync.WaitGroup, limit chan bool) error {
+	limit <- true
+	defer func() { <-limit }()
 	defer fmt.Println(objectName)
 	defer wg.Done()
 	wc := bkt.Object(objectName).NewWriter(ctx)
-	err := transferObject(token, container, &objectName, wc)
+	err := transferObject(token, container, objectName, wc)
 	return err
 }
