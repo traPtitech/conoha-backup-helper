@@ -145,7 +145,7 @@ func createBucket(ctx context.Context, client *storage.Client, container string)
 
 	bkt := client.Bucket(bucketName)
 	if err := bkt.Create(ctx, os.Getenv("PROJECT_ID"), &storage.BucketAttrs{
-		StorageClass: "STANDARD",
+		StorageClass: "COLDLINE",
 		Location:     "asia",
 		// 生成から90日でバケットを削除
 		Lifecycle:    storage.Lifecycle{Rules: []storage.LifecycleRule{{Action: storage.LifecycleAction{Type: "Delete"} ,Condition: storage.LifecycleCondition{AgeInDays: 90}}}},
