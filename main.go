@@ -88,6 +88,7 @@ func main() {
 			}
 		}
 		wg.Wait()
+
 	}
 }
 
@@ -145,11 +146,14 @@ func createBucket(ctx context.Context, client *storage.Client, container string)
 
 	bkt := client.Bucket(bucketName)
 	if err := bkt.Create(ctx, os.Getenv("PROJECT_ID"), &storage.BucketAttrs{
-		StorageClass: "STANDARD", // TODO: 実際に動かすときは"COLDLINE"
+		StorageClass: "COLDLINE",
 		Location:     "asia",
+		// 生成から90日でバケットを削除
+		Lifecycle:    storage.Lifecycle{Rules: []storage.LifecycleRule{{Condition: storage.LifecycleCondition{AgeInDays: 90}}}},
 	}); err != nil {
 		return nil, err
 	}
+
 	return bkt, nil
 }
 
