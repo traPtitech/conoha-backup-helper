@@ -142,18 +142,18 @@ func retrieveContainerList(token string) ([]string, error) {
 func createBucket(ctx context.Context, client *storage.Client, container string) (*storage.BucketHandle, error) {
 	t := time.Now()
 	bucketName := fmt.Sprintf("%s-%d-%d-%d", container, t.Year(), t.Month(), t.Day())
-	defer fmt.Println("\u001b[00;32m" + "Created: " + bucketName + " \u001b[00m")
 
 	bkt := client.Bucket(bucketName)
 	if err := bkt.Create(ctx, os.Getenv("PROJECT_ID"), &storage.BucketAttrs{
-		StorageClass: "COLDLINE",
+		StorageClass: "STANDARD",
 		Location:     "asia",
 		// 生成から90日でバケットを削除
-		Lifecycle:    storage.Lifecycle{Rules: []storage.LifecycleRule{{Condition: storage.LifecycleCondition{AgeInDays: 90}}}},
+		Lifecycle:    storage.Lifecycle{Rules: []storage.LifecycleRule{{Action: storage.LifecycleAction{Type: "Delete"} ,Condition: storage.LifecycleCondition{AgeInDays: 90}}}},
 	}); err != nil {
 		return nil, err
 	}
 
+	fmt.Println("\u001b[00;32m" + "Created: " + bucketName + " \u001b[00m")
 	return bkt, nil
 }
 
@@ -171,10 +171,12 @@ func retrieveObjectList(token string, container string) ([]string, error) {
 	}
 
 	defer resp.Body.Close()
-	buf := new(bytes.Buffer)
-	buf.ReadFrom(resp.Body)
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
 
-	objects := strings.Split(buf.String(), "\n")
+	objects := strings.Split(string(body), "\n")
 	objects = objects[:len(objects)-1]
 
 	return objects, nil
