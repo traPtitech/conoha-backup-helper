@@ -10,6 +10,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -39,6 +40,9 @@ type AccessToken struct {
 var tenantID string
 
 func main() {
+	cpus := runtime.NumCPU()
+	runtime.GOMAXPROCS(cpus)
+
 	path := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
 	tenantID = os.Getenv("Conoha_TENANT_ID")
 
@@ -64,8 +68,7 @@ func main() {
 	}
 	fmt.Println(containers)
 
-	// 最大でgoroutineは30個
-	limit := make(chan bool, 30)
+	limit := make(chan bool, cpus)
 	for _, container := range containers {
 		fmt.Println("\n" + "\u001b[00;32m" + "Creating bucket for " + container + " \u001b[00m")
 		bkt, err := createBucket(ctx, client, container)
@@ -146,7 +149,7 @@ func createBucket(ctx context.Context, client *storage.Client, container string)
 	bkt := client.Bucket(bucketName)
 	if err := bkt.Create(ctx, os.Getenv("PROJECT_ID"), &storage.BucketAttrs{
 		StorageClass: "COLDLINE",
-		Location:     "asia",
+		Location:     "asia-northeast1",
 		// 生成から90日でバケットを削除
 		Lifecycle:    storage.Lifecycle{Rules: []storage.LifecycleRule{{Action: storage.LifecycleAction{Type: "Delete"} ,Condition: storage.LifecycleCondition{AgeInDays: 90}}}},
 	}); err != nil {
