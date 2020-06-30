@@ -1,2 +1,2 @@
-# Conoha-backup-helper
+# conoha-backup-helper
 オブジェクトストレージをGCP Storageにバックアップ
