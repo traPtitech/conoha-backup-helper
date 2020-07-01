@@ -44,11 +44,11 @@ func main() {
 	runtime.GOMAXPROCS(cpus)
 
 	path := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
-	tenantID = os.Getenv("Conoha_TENANT_ID")
+	tenantID = os.Getenv("CONOHA_TENANT_ID")
 
 	authInfo := &AuthInfo{}
-	authInfo.Auth.PasswordCredentials.UserName = os.Getenv("Conoha_USERNAME")
-	authInfo.Auth.PasswordCredentials.Password = os.Getenv("Conoha_PASSWORD")
+	authInfo.Auth.PasswordCredentials.UserName = os.Getenv("CONOHA_USERNAME")
+	authInfo.Auth.PasswordCredentials.Password = os.Getenv("CONOHA_PASSWORD")
 	authInfo.Auth.TenantID = tenantID
 
 	token, err := getConohaAPIToken(authInfo)
