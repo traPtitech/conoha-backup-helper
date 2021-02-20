@@ -111,11 +111,14 @@ func getConohaAPIToken(authInfo *AuthInfo) (string, error) {
 	}
 
 	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
 
 	respJSON := &AccessToken{}
 	defer resp.Body.Close()
 	if err := json.NewDecoder(resp.Body).Decode(&respJSON); err != nil {
-		return "", nil
+		return "", err
 	}
 
 	return respJSON.Access.Token.ID, nil
