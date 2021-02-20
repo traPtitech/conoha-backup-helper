@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strconv"
+
 	"google.golang.org/api/option"
 	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"runtime"
 	"strings"
@@ -76,11 +79,12 @@ func main() {
 			log.Fatal(err)
 		}
 
-		fmt.Println("\n" + "\u001b[00;32m" + "Transferring objects in " + container + " \u001b[00m")
-		objects, err := retrieveObjectList(token, container)
+		fmt.Print("\n" + "\u001b[00;32m" + "Transferring objects in " + container) // 下に続く
+		objects, totalCount, err := retrieveFullObjectList(token, container)
 		if err != nil {
 			log.Fatal(err)
 		}
+		fmt.Printf(": %d objects" + " \u001b[00m" + "\n", totalCount)
 
 		var wg sync.WaitGroup
 		for _, objectName := range objects {
@@ -160,29 +164,61 @@ func createBucket(ctx context.Context, client *storage.Client, container string)
 	return bkt, nil
 }
 
-func retrieveObjectList(token string, container string) ([]string, error) {
-	url := "https://object-storage.tyo1.conoha.io/v1/nc_" + tenantID + "/" + container
+// 一回のリクエストでは最大10000件までしか帰ってこないのですべて取得するために複数回リクエストを送信する
+// refs: https://docs.openstack.org/ja/user-guide/cli-swift-large-lists.html
+func retrieveFullObjectList(token string, container string) ([]string, int, error) {
+	firstList, total, err := retrieveObjectList(token, container, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	list := make([]string, 0, total)
+	list = append(list, firstList...)
+
+	fmt.Println("1: ", len(firstList), len(list), total)
+
+	for len(list) < total {
+		marker := list[len(list)-1]
+		addList, _, err := retrieveObjectList(token, container, &marker)
+		if err != nil {
+			return nil, 0, err
+		}
+		list = append(list, addList...)
+	}
+	return list, total, nil
+}
+
+func retrieveObjectList(token string, container string, marker *string) ([]string, int, error) {
+	urlStr := "https://object-storage.tyo1.conoha.io/v1/nc_" + tenantID + "/" + container
+	if marker != nil {
+		urlStr += "?marker=" + url.QueryEscape(*marker)
+	}
 
 	client := &http.Client{}
 
-	req, _ := http.NewRequest("GET", url, nil)
+	req, _ := http.NewRequest("GET", urlStr, nil)
 	req.Header.Set("X-Auth-Token", token)
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+
+	totalCountStr := resp.Header.Get("X-Container-Object-Count")
+	totalCount, err := strconv.Atoi(totalCountStr)
+	if err != nil {
+		return nil, 0, err
 	}
 
 	objects := strings.Split(string(body), "\n")
 	objects = objects[:len(objects)-1]
 
-	return objects, nil
+	return objects, totalCount, nil
 }
 
 func transferObject(token string, container string, objectName string, wc *storage.Writer) error {
