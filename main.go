@@ -256,7 +256,6 @@ func transferObject(token string, container string, objectName string, wc *stora
 		return err
 	}
 
-	// TODO: checksum挟む
 	defer resp.Body.Close()
 	if _, err := io.Copy(wc, resp.Body); err != nil {
 		return err
