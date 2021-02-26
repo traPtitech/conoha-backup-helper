@@ -271,7 +271,6 @@ func transferObject(token string, container string, objectName string, wc *stora
 func backupObject(ctx context.Context, bkt *storage.BucketHandle, token string, container string, objectName string, wg *sync.WaitGroup, limit chan bool, errs *threadSafeBackupErrorSlice) {
 	limit <- true
 	defer func() { <-limit }()
-	defer fmt.Println(objectName)
 	defer wg.Done()
 	wc := bkt.Object(objectName).NewWriter(ctx)
 	err := transferObject(token, container, objectName, wc)
