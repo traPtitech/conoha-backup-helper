@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strconv"
 
-	"google.golang.org/api/option"
 	"io"
 	"io/ioutil"
 	"log"
@@ -17,6 +16,9 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/fatih/color"
+	"google.golang.org/api/option"
 
 	"cloud.google.com/go/storage"
 	"golang.org/x/net/context"
@@ -39,6 +41,8 @@ type AccessToken struct {
 		} `json:"token"`
 	} `json:"access"`
 }
+
+var greenFmt = color.New(color.FgGreen)
 
 var tenantID string
 
@@ -73,18 +77,20 @@ func main() {
 
 	limit := make(chan bool, cpus)
 	for _, container := range containers {
-		fmt.Println("\n" + "\u001b[00;32m" + "Creating bucket for " + container + " \u001b[00m")
+		fmt.Println()
+		greenFmt.Printf("Creating bucket for %s\n", container)
 		bkt, err := createBucket(ctx, client, container)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		fmt.Print("\n" + "\u001b[00;32m" + "Transferring objects in " + container) // 下に続く
+		fmt.Println()
+		greenFmt.Printf("Transferring objects in %s", container) // 下に続く
 		objects, totalCount, err := retrieveFullObjectList(token, container)
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf(": %d objects" + " \u001b[00m" + "\n", totalCount)
+		greenFmt.Printf(": %d objects\n", totalCount)
 
 		var wg sync.WaitGroup
 		for _, objectName := range objects {
@@ -163,7 +169,7 @@ func createBucket(ctx context.Context, client *storage.Client, container string)
 		return nil, err
 	}
 
-	fmt.Println("\u001b[00;32m" + "Created: " + bucketName + " \u001b[00m")
+	greenFmt.Printf("Created: %s\n", bucketName)
 	return bkt, nil
 }
 
