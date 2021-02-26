@@ -43,6 +43,7 @@ type AccessToken struct {
 }
 
 var greenFmt = color.New(color.FgGreen)
+var redFmt = color.New(color.FgRed)
 
 var tenantID string
 
@@ -93,11 +94,19 @@ func main() {
 		greenFmt.Printf(": %d objects\n", totalCount)
 
 		var wg sync.WaitGroup
+		var errs threadSafeBackupErrorSlice
 		for _, objectName := range objects {
 			wg.Add(1)
-			go backupObject(ctx, bkt, token, container, objectName, &wg, limit)
+			go backupObject(ctx, bkt, token, container, objectName, &wg, limit, &errs)
 		}
 		wg.Wait()
+
+		errCount := errs.len()
+		if errCount > 0 {
+			redFmt.Printf("Failed to backup %d objects.\n", errCount)
+			errStrs := errs.getFormattedErrors()
+			fmt.Print(errStrs)
+		}
 
 	}
 }
@@ -259,7 +268,7 @@ func transferObject(token string, container string, objectName string, wc *stora
 	return nil
 }
 
-func backupObject(ctx context.Context, bkt *storage.BucketHandle, token string, container string, objectName string, wg *sync.WaitGroup, limit chan bool) {
+func backupObject(ctx context.Context, bkt *storage.BucketHandle, token string, container string, objectName string, wg *sync.WaitGroup, limit chan bool, errs *threadSafeBackupErrorSlice) {
 	limit <- true
 	defer func() { <-limit }()
 	defer fmt.Println(objectName)
@@ -267,6 +276,9 @@ func backupObject(ctx context.Context, bkt *storage.BucketHandle, token string, 
 	wc := bkt.Object(objectName).NewWriter(ctx)
 	err := transferObject(token, container, objectName, wc)
 	if err != nil {
-		log.Fatal(err)
+		errs.append(backupError{
+			err:        err,
+			objectName: objectName,
+		})
 	}
 }
