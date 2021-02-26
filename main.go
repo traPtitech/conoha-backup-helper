@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -21,7 +22,6 @@ import (
 	"google.golang.org/api/option"
 
 	"cloud.google.com/go/storage"
-	"golang.org/x/net/context"
 )
 
 type AuthInfo struct {
