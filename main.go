@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/golang/snappy"
 	"google.golang.org/api/option"
 
 	"cloud.google.com/go/storage"
@@ -196,8 +197,6 @@ func retrieveFullObjectList(token string, container string) ([]string, int, erro
 	list := make([]string, 0, total)
 	list = append(list, firstList...)
 
-	fmt.Println("1: ", len(firstList), len(list), total)
-
 	for len(list) < total {
 		marker := list[len(list)-1]
 		addList, _, err := retrieveObjectList(token, container, &marker)
@@ -256,11 +255,13 @@ func transferObject(token string, container string, objectName string, wc *stora
 		return err
 	}
 
+	snappyWriter := snappy.NewBufferedWriter(wc)
+
 	defer resp.Body.Close()
-	if _, err := io.Copy(wc, resp.Body); err != nil {
+	if _, err := io.Copy(snappyWriter, resp.Body); err != nil {
 		return err
 	}
-	if err := wc.Close(); err != nil {
+	if err := snappyWriter.Close(); err != nil {
 		return err
 	}
 
