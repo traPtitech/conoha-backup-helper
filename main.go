@@ -96,9 +96,6 @@ func main() {
 		for _, objectName := range objects {
 			wg.Add(1)
 			go backupObject(ctx, bkt, token, container, objectName, &wg, limit)
-			if err != nil {
-				log.Fatal(err)
-			}
 		}
 		wg.Wait()
 
@@ -262,12 +259,14 @@ func transferObject(token string, container string, objectName string, wc *stora
 	return nil
 }
 
-func backupObject(ctx context.Context, bkt *storage.BucketHandle, token string, container string, objectName string, wg *sync.WaitGroup, limit chan bool) error {
+func backupObject(ctx context.Context, bkt *storage.BucketHandle, token string, container string, objectName string, wg *sync.WaitGroup, limit chan bool) {
 	limit <- true
 	defer func() { <-limit }()
 	defer fmt.Println(objectName)
 	defer wg.Done()
 	wc := bkt.Object(objectName).NewWriter(ctx)
 	err := transferObject(token, container, objectName, wc)
-	return err
+	if err != nil {
+		log.Fatal(err)
+	}
 }
