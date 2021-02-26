@@ -160,12 +160,19 @@ func createBucket(ctx context.Context, client *storage.Client, container string)
 	bucketName := fmt.Sprintf("%s-%d-%d-%d", container, t.Year(), t.Month(), t.Day())
 
 	bkt := client.Bucket(bucketName)
-	if err := bkt.Create(ctx, os.Getenv("PROJECT_ID"), &storage.BucketAttrs{
+	bktAttrs := storage.BucketAttrs{
 		StorageClass: "COLDLINE",
 		Location:     "asia-northeast1",
 		// 生成から90日でバケットを削除
-		Lifecycle:    storage.Lifecycle{Rules: []storage.LifecycleRule{{Action: storage.LifecycleAction{Type: "Delete"} ,Condition: storage.LifecycleCondition{AgeInDays: 90}}}},
-	}); err != nil {
+		Lifecycle: storage.Lifecycle{Rules: []storage.LifecycleRule{
+			{
+				Action:    storage.LifecycleAction{Type: "Delete"},
+				Condition: storage.LifecycleCondition{AgeInDays: 90},
+			},
+		}},
+	}
+
+	if err := bkt.Create(ctx, os.Getenv("PROJECT_ID"), &bktAttrs); err != nil {
 		return nil, err
 	}
 
