@@ -2,11 +2,11 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
 
-	"google.golang.org/api/option"
 	"io"
 	"io/ioutil"
 	"log"
@@ -18,8 +18,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fatih/color"
+	"google.golang.org/api/option"
+
 	"cloud.google.com/go/storage"
-	"golang.org/x/net/context"
 )
 
 type AuthInfo struct {
@@ -39,6 +41,9 @@ type AccessToken struct {
 		} `json:"token"`
 	} `json:"access"`
 }
+
+var greenFmt = color.New(color.FgGreen)
+var redFmt = color.New(color.FgRed)
 
 var tenantID string
 
@@ -73,28 +78,35 @@ func main() {
 
 	limit := make(chan bool, cpus)
 	for _, container := range containers {
-		fmt.Println("\n" + "\u001b[00;32m" + "Creating bucket for " + container + " \u001b[00m")
+		fmt.Println()
+		greenFmt.Printf("Creating bucket for %s\n", container)
 		bkt, err := createBucket(ctx, client, container)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		fmt.Print("\n" + "\u001b[00;32m" + "Transferring objects in " + container) // 下に続く
+		fmt.Println()
+		greenFmt.Printf("Transferring objects in %s", container) // 下に続く
 		objects, totalCount, err := retrieveFullObjectList(token, container)
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf(": %d objects" + " \u001b[00m" + "\n", totalCount)
+		greenFmt.Printf(": %d objects\n", totalCount)
 
 		var wg sync.WaitGroup
+		var errs threadSafeBackupErrorSlice
 		for _, objectName := range objects {
 			wg.Add(1)
-			go backupObject(ctx, bkt, token, container, objectName, &wg, limit)
-			if err != nil {
-				log.Fatal(err)
-			}
+			go backupObject(ctx, bkt, token, container, objectName, &wg, limit, &errs)
 		}
 		wg.Wait()
+
+		errCount := errs.len()
+		if errCount > 0 {
+			redFmt.Printf("Failed to backup %d objects.\n", errCount)
+			errStrs := errs.getFormattedErrors()
+			fmt.Print(errStrs)
+		}
 
 	}
 }
@@ -154,16 +166,23 @@ func createBucket(ctx context.Context, client *storage.Client, container string)
 	bucketName := fmt.Sprintf("%s-%d-%d-%d", container, t.Year(), t.Month(), t.Day())
 
 	bkt := client.Bucket(bucketName)
-	if err := bkt.Create(ctx, os.Getenv("PROJECT_ID"), &storage.BucketAttrs{
+	bktAttrs := storage.BucketAttrs{
 		StorageClass: "COLDLINE",
 		Location:     "asia-northeast1",
 		// 生成から90日でバケットを削除
-		Lifecycle:    storage.Lifecycle{Rules: []storage.LifecycleRule{{Action: storage.LifecycleAction{Type: "Delete"} ,Condition: storage.LifecycleCondition{AgeInDays: 90}}}},
-	}); err != nil {
+		Lifecycle: storage.Lifecycle{Rules: []storage.LifecycleRule{
+			{
+				Action:    storage.LifecycleAction{Type: "Delete"},
+				Condition: storage.LifecycleCondition{AgeInDays: 90},
+			},
+		}},
+	}
+
+	if err := bkt.Create(ctx, os.Getenv("PROJECT_ID"), &bktAttrs); err != nil {
 		return nil, err
 	}
 
-	fmt.Println("\u001b[00;32m" + "Created: " + bucketName + " \u001b[00m")
+	greenFmt.Printf("Created: %s\n", bucketName)
 	return bkt, nil
 }
 
@@ -237,7 +256,6 @@ func transferObject(token string, container string, objectName string, wc *stora
 		return err
 	}
 
-	// TODO: checksum挟む
 	defer resp.Body.Close()
 	if _, err := io.Copy(wc, resp.Body); err != nil {
 		return err
@@ -249,12 +267,17 @@ func transferObject(token string, container string, objectName string, wc *stora
 	return nil
 }
 
-func backupObject(ctx context.Context, bkt *storage.BucketHandle, token string, container string, objectName string, wg *sync.WaitGroup, limit chan bool) error {
+func backupObject(ctx context.Context, bkt *storage.BucketHandle, token string, container string, objectName string, wg *sync.WaitGroup, limit chan bool, errs *threadSafeBackupErrorSlice) {
 	limit <- true
 	defer func() { <-limit }()
 	defer fmt.Println(objectName)
 	defer wg.Done()
 	wc := bkt.Object(objectName).NewWriter(ctx)
 	err := transferObject(token, container, objectName, wc)
-	return err
+	if err != nil {
+		errs.append(backupError{
+			err:        err,
+			objectName: objectName,
+		})
+	}
 }
