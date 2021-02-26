@@ -1,2 +1,2 @@
 # conoha-backup-helper
-オブジェクトストレージをGCP Storageにバックアップ
+オブジェクトストレージをsnappyで圧縮してGCP Storageにバックアップ

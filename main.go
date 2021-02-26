@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/golang/snappy"
 	"google.golang.org/api/option"
 
 	"cloud.google.com/go/storage"
@@ -256,11 +257,13 @@ func transferObject(token string, container string, objectName string, wc *stora
 		return err
 	}
 
+	snappyWriter := snappy.NewBufferedWriter(wc)
+
 	defer resp.Body.Close()
-	if _, err := io.Copy(wc, resp.Body); err != nil {
+	if _, err := io.Copy(snappyWriter, resp.Body); err != nil {
 		return err
 	}
-	if err := wc.Close(); err != nil {
+	if err := snappyWriter.Close(); err != nil {
 		return err
 	}
 
