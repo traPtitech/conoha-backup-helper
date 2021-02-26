@@ -197,8 +197,6 @@ func retrieveFullObjectList(token string, container string) ([]string, int, erro
 	list := make([]string, 0, total)
 	list = append(list, firstList...)
 
-	fmt.Println("1: ", len(firstList), len(list), total)
-
 	for len(list) < total {
 		marker := list[len(list)-1]
 		addList, _, err := retrieveObjectList(token, container, &marker)
