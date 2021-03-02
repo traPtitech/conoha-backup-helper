@@ -254,14 +254,12 @@ func transferObject(token string, container string, objectName string, wc *stora
 	if err != nil {
 		return err
 	}
+	defer resp.Body.Close()
 
 	snappyWriter := snappy.NewBufferedWriter(wc)
+	defer snappyWriter.Close()
 
-	defer resp.Body.Close()
 	if _, err := io.Copy(snappyWriter, resp.Body); err != nil {
-		return err
-	}
-	if err := snappyWriter.Close(); err != nil {
 		return err
 	}
 
@@ -272,7 +270,17 @@ func backupObject(ctx context.Context, bkt *storage.BucketHandle, token string, 
 	limit <- true
 	defer func() { <-limit }()
 	defer wg.Done()
+
 	wc := bkt.Object(objectName).NewWriter(ctx)
+	defer func() {
+		if err := wc.Close(); err != nil {
+			errs.append(backupError{
+				err:        err,
+				objectName: objectName,
+			})
+		}
+	}()
+
 	err := transferObject(token, container, objectName, wc)
 	if err != nil {
 		errs.append(backupError{
