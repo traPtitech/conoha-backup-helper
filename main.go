@@ -243,23 +243,41 @@ func retrieveObjectList(token string, container string, marker *string) ([]strin
 }
 
 func transferObject(token string, container string, objectName string, wc *storage.Writer) error {
-	url := "https://object-storage.tyo1.conoha.io/v1/nc_" + tenantID + "/" + container + "/" + objectName
+	pr, pw := io.Pipe()
 
-	client := &http.Client{}
+	errChan := make(chan error)
+	go func() {
+		defer pw.Close()
 
-	req, _ := http.NewRequest("GET", url, nil)
-	req.Header.Set("X-Auth-Token", token)
+		url := "https://object-storage.tyo1.conoha.io/v1/nc_" + tenantID + "/" + container + "/" + objectName
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
+		client := &http.Client{}
+
+		req, _ := http.NewRequest("GET", url, nil)
+		req.Header.Set("X-Auth-Token", token)
+
+		resp, err := client.Do(req)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		defer resp.Body.Close()
+
+		if _, err := io.Copy(pw, resp.Body); err != nil {
+			errChan <- err
+			return
+		}
+		errChan <- nil
+	}()
 
 	snappyWriter := snappy.NewBufferedWriter(wc)
 	defer snappyWriter.Close()
 
-	if _, err := io.Copy(snappyWriter, resp.Body); err != nil {
+	if _, err := io.Copy(snappyWriter, pr); err != nil {
+		return err
+	}
+
+	if err := <-errChan; err != nil {
 		return err
 	}
 
