@@ -26,7 +26,6 @@ var projectID = os.Getenv("PROJECT_ID")
 
 func main() {
 	cpus := runtime.NumCPU()
-	runtime.GOMAXPROCS(cpus)
 
 	path := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
