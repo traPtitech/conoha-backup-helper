@@ -22,11 +22,15 @@ import (
 
 const dateFormat = "2006/01/02 15:04:05"
 
-var greenFmt = color.New(color.FgGreen)
-var redFmt = color.New(color.FgRed)
+var (
+	greenFmt = color.New(color.FgGreen)
+	redFmt   = color.New(color.FgRed)
+)
 
-var projectID = os.Getenv("PROJECT_ID")
-var parallelNum = 5
+var (
+	projectID   = os.Getenv("PROJECT_ID")
+	parallelNum = 5
+)
 
 func main() {
 	if pn := os.Getenv("PARALLEL_NUM"); pn != "" {
