@@ -3,11 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"io"
 	"log"
 	"os"
-	"runtime"
 	"sync"
 	"time"
 
@@ -23,9 +23,16 @@ var greenFmt = color.New(color.FgGreen)
 var redFmt = color.New(color.FgRed)
 
 var projectID = os.Getenv("PROJECT_ID")
+var parallelNum = 5
 
 func main() {
-	cpus := runtime.NumCPU()
+	if pn := os.Getenv("PARALLEL_NUM"); pn != "" {
+		pnI, err := strconv.Atoi(pn)
+		if err != nil {
+			log.Fatal(err)
+		}
+		parallelNum = pnI
+	}
 
 	path := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
 
@@ -52,7 +59,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	limit := make(chan bool, cpus)
+	limit := make(chan bool, parallelNum)
 	for _, container := range containers {
 		fmt.Println()
 		greenFmt.Printf("Creating bucket for %s\n", container)

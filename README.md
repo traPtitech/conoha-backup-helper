@@ -13,3 +13,5 @@
 - GCP関連
   - `GOOGLE_APPLICATION_CREDENTIALS`
   - `PROJECT_ID`
+- その他
+  - `PARALLEL_NUM`: 同時ダウンロード数
