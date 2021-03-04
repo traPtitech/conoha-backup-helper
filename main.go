@@ -22,6 +22,8 @@ import (
 var greenFmt = color.New(color.FgGreen)
 var redFmt = color.New(color.FgRed)
 
+var projectID = os.Getenv("PROJECT_ID")
+
 func main() {
 	cpus := runtime.NumCPU()
 	runtime.GOMAXPROCS(cpus)
@@ -103,7 +105,7 @@ func createBucket(ctx context.Context, client *storage.Client, container string)
 		}},
 	}
 
-	if err := bkt.Create(ctx, os.Getenv("PROJECT_ID"), &bktAttrs); err != nil {
+	if err := bkt.Create(ctx, projectID, &bktAttrs); err != nil {
 		return nil, err
 	}
 
