@@ -14,6 +14,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/golang/snappy"
 	"github.com/ncw/swift"
+	"go.uber.org/atomic"
 	"google.golang.org/api/option"
 
 	"cloud.google.com/go/storage"
@@ -74,13 +75,30 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
-		greenFmt.Printf(": %d objects\n", len(objects))
+		objectLen := len(objects)
+		greenFmt.Printf(": %d objects\n", objectLen)
 
 		var wg sync.WaitGroup
+		var doneCount atomic.Uint64
 		var errs threadSafeBackupErrorSlice
+
 		for _, objectName := range objects {
 			wg.Add(1)
-			go backupObject(ctx, bkt, objectStorage, container, objectName, &wg, limit, &errs)
+
+			go func(objectName string) {
+				limit <- true
+				defer func() { <-limit }()
+
+				defer wg.Done()
+				defer func() {
+					dc := doneCount.Inc()
+					if dc%1000 == 0 {
+						fmt.Printf("Done %d of %d\n", dc, objectLen)
+					}
+				}()
+
+				backupObject(ctx, bkt, objectStorage, container, objectName, &errs)
+			}(objectName)
 		}
 		wg.Wait()
 
@@ -149,11 +167,7 @@ func transferObject(objectStorage *swift.Connection, container string, objectNam
 	return nil
 }
 
-func backupObject(ctx context.Context, bkt *storage.BucketHandle, objectStorage *swift.Connection, container string, objectName string, wg *sync.WaitGroup, limit chan bool, errs *threadSafeBackupErrorSlice) {
-	limit <- true
-	defer func() { <-limit }()
-	defer wg.Done()
-
+func backupObject(ctx context.Context, bkt *storage.BucketHandle, objectStorage *swift.Connection, container string, objectName string, errs *threadSafeBackupErrorSlice) {
 	wc := bkt.Object(objectName).NewWriter(ctx)
 	defer func() {
 		if err := wc.Close(); err != nil {

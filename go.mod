@@ -8,5 +8,6 @@ require (
 	github.com/fatih/color v1.10.0
 	github.com/golang/snappy v0.0.3
 	github.com/ncw/swift v1.0.53
+	go.uber.org/atomic v1.7.0
 	google.golang.org/api v0.20.0
 )
