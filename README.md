@@ -1,5 +1,6 @@
 # conoha-backup-helper
 オブジェクトストレージをsnappyで圧縮してGCP Storageにバックアップ
+完了したときにtraQにWebhookを送信する
 
 ## 設定
 
@@ -13,5 +14,8 @@
 - GCP関連
   - `GOOGLE_APPLICATION_CREDENTIALS`
   - `PROJECT_ID`
+- traQ関連
+  - `TRAQ_WEBHOOK_ID`
+  - `TRAQ_WEBHOOK_SECRET`
 - その他
   - `PARALLEL_NUM`: 同時ダウンロード数

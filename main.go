@@ -20,6 +20,8 @@ import (
 	"cloud.google.com/go/storage"
 )
 
+const dateFormat = "2006/01/02 15:04:05"
+
 var greenFmt = color.New(color.FgGreen)
 var redFmt = color.New(color.FgRed)
 
@@ -59,6 +61,8 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	backupStart := time.Now()
 
 	limit := make(chan bool, parallelNum)
 	for _, container := range containers {
@@ -109,6 +113,19 @@ func main() {
 			fmt.Print(errStrs)
 		}
 
+	}
+
+	backupEnd := time.Now()
+	backupDuration := backupEnd.Sub(backupStart)
+
+	message := fmt.Sprintf(`### オブジェクトストレージのバックアップが保存されました
+	バックアップ開始時刻: %s
+	バックアップ所要時間: %f
+	`, backupStart.Format(dateFormat), backupDuration.Hours())
+
+	err = postWebhook(message)
+	if err != nil {
+		fmt.Println("Failed to post webhook:", err)
 	}
 }
 
