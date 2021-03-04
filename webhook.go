@@ -29,10 +29,10 @@ func postWebhook(message string) error {
 	req.Header.Set("X-TRAQ-Signature", sig)
 
 	res, err := http.DefaultClient.Do(req)
-	defer res.Body.Close()
 	if err != nil {
 		return err
 	}
+	defer res.Body.Close()
 
 	body, err := ioutil.ReadAll(res.Body)
 	if err != nil {
