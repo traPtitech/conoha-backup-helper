@@ -63,6 +63,8 @@ func main() {
 	}
 
 	backupStart := time.Now()
+	totalObjects := 0
+	totalErrors := 0
 
 	limit := make(chan bool, parallelNum)
 	for _, container := range containers {
@@ -81,6 +83,7 @@ func main() {
 		}
 		objectLen := len(objects)
 		greenFmt.Printf(": %d objects\n", objectLen)
+		totalObjects += objectLen
 
 		var wg sync.WaitGroup
 		var doneCount atomic.Uint64
@@ -112,6 +115,7 @@ func main() {
 			errStrs := errs.getFormattedErrors()
 			fmt.Print(errStrs)
 		}
+		totalErrors += errCount
 
 	}
 
@@ -121,7 +125,9 @@ func main() {
 	message := fmt.Sprintf(`### オブジェクトストレージのバックアップが保存されました
 	バックアップ開始時刻: %s
 	バックアップ所要時間: %f
-	`, backupStart.Format(dateFormat), backupDuration.Hours())
+	オブジェクト数: %d
+	エラー数: %d
+	`, backupStart.Format(dateFormat), backupDuration.Hours(), totalObjects, totalErrors)
 
 	err = postWebhook(message)
 	if err != nil {
