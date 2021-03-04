@@ -124,7 +124,7 @@ func main() {
 
 	message := fmt.Sprintf(`### オブジェクトストレージのバックアップが保存されました
 	バックアップ開始時刻: %s
-	バックアップ所要時間: %f
+	バックアップ所要時間: %f時間
 	オブジェクト数: %d
 	エラー数: %d
 	`, backupStart.Format(dateFormat), backupDuration.Hours(), totalObjects, totalErrors)
