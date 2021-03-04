@@ -116,7 +116,7 @@ func createBucket(ctx context.Context, client *storage.Client, container string)
 func transferObject(objectStorage *swift.Connection, container string, objectName string, wc *storage.Writer) error {
 	pr, pw := io.Pipe()
 
-	errChan := make(chan error)
+	errChan := make(chan error, 1)
 	go func() {
 		defer pw.Close()
 
