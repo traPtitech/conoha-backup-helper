@@ -95,9 +95,9 @@ func main() {
 
 		for _, objectName := range objects {
 			wg.Add(1)
+			limit <- true
 
 			go func(objectName string) {
-				limit <- true
 				defer func() { <-limit }()
 
 				defer wg.Done()
