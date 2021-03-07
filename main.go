@@ -196,19 +196,21 @@ func transferObject(objectStorage *swift.Connection, container string, objectNam
 
 func backupObject(ctx context.Context, bkt *storage.BucketHandle, objectStorage *swift.Connection, container string, objectName string, errs *threadSafeBackupErrorSlice) {
 	wc := bkt.Object(objectName).NewWriter(ctx)
-	defer func() {
-		if err := wc.Close(); err != nil {
-			errs.append(backupError{
-				err:        err,
-				objectName: objectName,
-			})
-		}
-	}()
 
 	err := transferObject(objectStorage, container, objectName, wc)
+
+	wcErr := wc.Close()
+
 	if err != nil {
 		errs.append(backupError{
 			err:        err,
+			objectName: objectName,
+		})
+	} else if wcErr != nil {
+		// オブジェクト一つに対してエラーは一つだけ追加したいため
+		// errが存在するときはerrsに追加しない
+		errs.append(backupError{
+			err:        wcErr,
 			objectName: objectName,
 		})
 	}
