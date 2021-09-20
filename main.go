@@ -16,6 +16,7 @@ import (
 	"github.com/golang/snappy"
 	"github.com/ncw/swift"
 	"go.uber.org/atomic"
+	"golang.org/x/sync/semaphore"
 	"google.golang.org/api/option"
 
 	"cloud.google.com/go/storage"
@@ -29,13 +30,13 @@ var (
 )
 
 var (
-	projectID   = os.Getenv("PROJECT_ID")
-	parallelNum = 5
+	projectID         = os.Getenv("PROJECT_ID")
+	parallelNum int64 = 5
 )
 
 func main() {
 	if pn := os.Getenv("PARALLEL_NUM"); pn != "" {
-		pnI, err := strconv.Atoi(pn)
+		pnI, err := strconv.ParseInt(pn, 10, 64)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -70,8 +71,8 @@ func main() {
 	backupStart := time.Now()
 	totalObjects := 0
 	totalErrors := 0
+	limit := semaphore.NewWeighted(parallelNum)
 
-	limit := make(chan bool, parallelNum)
 	for _, container := range containers {
 		fmt.Println()
 		greenFmt.Printf("Ensuring bucket for %s\n", container)
@@ -96,10 +97,10 @@ func main() {
 
 		for _, objectName := range objects {
 			wg.Add(1)
-			limit <- true
+			limit.Acquire(ctx, 1)
 
 			go func(objectName string) {
-				defer func() { <-limit }()
+				defer limit.Release(1)
 
 				defer wg.Done()
 				defer func() {

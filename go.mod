@@ -9,6 +9,7 @@ require (
 	github.com/golang/snappy v0.0.3
 	github.com/ncw/swift v1.0.53
 	go.uber.org/atomic v1.7.0
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	google.golang.org/api v0.20.0
 )
 
