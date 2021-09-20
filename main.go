@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -73,8 +74,8 @@ func main() {
 	limit := make(chan bool, parallelNum)
 	for _, container := range containers {
 		fmt.Println()
-		greenFmt.Printf("Creating bucket for %s\n", container)
-		bkt, err := createBucket(ctx, client, container)
+		greenFmt.Printf("Ensuring bucket for %s\n", container)
+		bkt, err := ensureBucket(ctx, client, container)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -139,28 +140,37 @@ func main() {
 	}
 }
 
-func createBucket(ctx context.Context, client *storage.Client, container string) (*storage.BucketHandle, error) {
-	t := time.Now()
-	bucketName := fmt.Sprintf("%s-%d-%d-%d", container, t.Year(), t.Month(), t.Day())
+func ensureBucket(ctx context.Context, client *storage.Client, container string) (*storage.BucketHandle, error) {
+	bkt := client.Bucket(container)
 
-	bkt := client.Bucket(bucketName)
-	bktAttrs := storage.BucketAttrs{
-		StorageClass: "COLDLINE",
-		Location:     "asia-northeast1",
-		// 生成から90日でバケットを削除
-		Lifecycle: storage.Lifecycle{Rules: []storage.LifecycleRule{
-			{
-				Action:    storage.LifecycleAction{Type: "Delete"},
-				Condition: storage.LifecycleCondition{AgeInDays: 90},
-			},
-		}},
-	}
-
-	if err := bkt.Create(ctx, projectID, &bktAttrs); err != nil {
+	bktAttrs, err := bkt.Attrs(ctx)
+	if err == storage.ErrBucketNotExist {
+		createBktAttrs := storage.BucketAttrs{
+			StorageClass: "COLDLINE",
+			Location:     "asia-northeast1",
+			// 生成から90日でオブジェクトを削除
+			Lifecycle: storage.Lifecycle{Rules: []storage.LifecycleRule{
+				{
+					Action:    storage.LifecycleAction{Type: "Delete"},
+					Condition: storage.LifecycleCondition{AgeInDays: 90},
+				},
+			}},
+		}
+		if err := bkt.Create(ctx, projectID, &createBktAttrs); err != nil {
+			return nil, err
+		}
+		greenFmt.Printf("Created: %s\n", container)
+	} else if err != nil {
 		return nil, err
-	}
+	} else {
+		// already exists
 
-	greenFmt.Printf("Created: %s\n", bucketName)
+		if bktAttrs.StorageClass != "COLDLINE" {
+			return nil, errors.New("Bucket default storage class is not correct. Expected: COLDLINE. Actual: " + bktAttrs.StorageClass)
+		}
+
+		// may check more?
+	}
 	return bkt, nil
 }
 
