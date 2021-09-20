@@ -144,8 +144,9 @@ func ensureBucket(ctx context.Context, client *storage.Client, container string)
 	bktAttrs, err := bkt.Attrs(ctx)
 	if err == storage.ErrBucketNotExist {
 		createBktAttrs := storage.BucketAttrs{
-			StorageClass: "COLDLINE",
-			Location:     "asia-northeast1",
+			StorageClass:      "COLDLINE",
+			Location:          "asia-northeast1",
+			VersioningEnabled: true,
 			// 生成から90日でオブジェクトを削除
 			Lifecycle: storage.Lifecycle{Rules: []storage.LifecycleRule{
 				{
@@ -165,6 +166,9 @@ func ensureBucket(ctx context.Context, client *storage.Client, container string)
 
 		if bktAttrs.StorageClass != "COLDLINE" {
 			return nil, errors.New("Bucket default storage class is not correct. Expected: COLDLINE. Actual: " + bktAttrs.StorageClass)
+		}
+		if !bktAttrs.VersioningEnabled {
+			return nil, errors.New("Bucket versioning status is not correct. Expected: enabled. Actual: disabled")
 		}
 
 		// may check more?
