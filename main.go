@@ -101,16 +101,14 @@ func main() {
 
 			go func(objectName string) {
 				defer limit.Release(1)
-
 				defer wg.Done()
-				defer func() {
-					dc := doneCount.Inc()
-					if dc%1000 == 0 {
-						fmt.Printf("Done %d of %d\n", dc, objectLen)
-					}
-				}()
 
 				backupObject(ctx, bkt, objectStorage, container, objectName, &errs)
+
+				dc := doneCount.Inc()
+				if dc%1000 == 0 {
+					fmt.Printf("Done %d of %d\n", dc, objectLen)
+				}
 			}(objectName)
 		}
 		wg.Wait()
@@ -122,7 +120,6 @@ func main() {
 			fmt.Print(errStrs)
 		}
 		totalErrors += errCount
-
 	}
 
 	backupEnd := time.Now()
