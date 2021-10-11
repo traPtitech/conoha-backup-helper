@@ -68,18 +68,23 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// 途中でエラーが起きないでほしいので先に作成しておく
+	for _, container := range containers {
+		fmt.Println()
+		greenFmt.Printf("Ensuring bucket for %s\n", container)
+		_, err := ensureBucket(ctx, client, container)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
 	backupStart := time.Now()
 	totalObjects := 0
 	totalErrors := 0
 	limit := semaphore.NewWeighted(parallelNum)
 
 	for _, container := range containers {
-		fmt.Println()
-		greenFmt.Printf("Ensuring bucket for %s\n", container)
-		bkt, err := ensureBucket(ctx, client, container)
-		if err != nil {
-			log.Fatal(err)
-		}
+		bkt := client.Bucket(container)
 
 		fmt.Println()
 		greenFmt.Printf("Transferring objects in %s", container) // 下に続く
