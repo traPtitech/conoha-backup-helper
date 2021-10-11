@@ -14,6 +14,8 @@
 - GCP関連
   - `GOOGLE_APPLICATION_CREDENTIALS`
   - `PROJECT_ID`
+  - `BUCKET_NAME_SUFFIX`: バケット名につけるsuffix
+    - GCPのバケット名はグローバル(アカウントを跨いで)でユニークである必要があるため
 - traQ関連
   - `TRAQ_WEBHOOK_ID`
   - `TRAQ_WEBHOOK_SECRET`

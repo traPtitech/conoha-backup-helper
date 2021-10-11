@@ -30,8 +30,9 @@ var (
 )
 
 var (
-	projectID         = os.Getenv("PROJECT_ID")
-	parallelNum int64 = 5
+	projectID              = os.Getenv("PROJECT_ID")
+	bucketNameSuffix       = os.Getenv("BUCKET_NAME_SUFFIX")
+	parallelNum      int64 = 5
 )
 
 func main() {
@@ -70,9 +71,10 @@ func main() {
 
 	// 途中でエラーが起きないでほしいので先に作成しておく
 	for _, container := range containers {
+		suffixedContainer := container + bucketNameSuffix
 		fmt.Println()
 		greenFmt.Printf("Ensuring bucket for %s\n", container)
-		_, err := ensureBucket(ctx, client, container)
+		_, err := ensureBucket(ctx, client, suffixedContainer)
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -84,7 +86,8 @@ func main() {
 	limit := semaphore.NewWeighted(parallelNum)
 
 	for _, container := range containers {
-		bkt := client.Bucket(container)
+		suffixedContainer := container + bucketNameSuffix
+		bkt := client.Bucket(suffixedContainer)
 
 		fmt.Println()
 		greenFmt.Printf("Transferring objects in %s", container) // 下に続く
